@@ -38,7 +38,7 @@ button{border:0;border-radius:14px;padding:15px 22px;font-size:16px;font-weight:
 .timer{font-size:42px;font-weight:950;color:#20ee78}.timer.danger{color:#fff}
 .timerStart{background:#20eb72;color:#001b0d;min-width:220px}.timerStart:disabled,.plus:disabled,.minus:disabled{opacity:.35;cursor:not-allowed}
 .timeup{font-size:28px;font-weight:950;color:#fff;letter-spacing:2px}
-.next{background:white;color:#07110c;width:100%;margin-top:12px}.screenlink{font-size:13px;color:#81938a;margin-top:15px}.screenlink a{color:#20ee78}
+.nextZone{margin-top:34px;padding-top:20px;border-top:1px solid #174b30;display:flex;justify-content:flex-end}.next{background:#18231d;color:#cbd5cf;border:1px solid #405047;width:auto;min-width:270px;margin:0;font-size:14px}.next:hover{background:#243129}.screenlink{font-size:13px;color:#81938a;margin-top:15px}.screenlink a{color:#20ee78}
 .game{display:none}.game.on{display:block}.label{color:#84968c;font-size:14px;font-weight:800;letter-spacing:1px}
 .current{font-size:34px;font-weight:900;margin-top:8px}.score{font-size:72px;color:#20ee78;font-weight:900}
 .controls{display:grid;grid-template-columns:1fr 135px;gap:12px}.plus{font-size:32px}.minus{font-size:26px}
@@ -65,7 +65,7 @@ button{border:0;border-radius:14px;padding:15px 22px;font-size:16px;font-weight:
     <div class="timerBox"><div><div class="label">ВРЕМЯ</div><div class="timer" id="timer">40</div></div><button class="timerStart" id="timerStart" onclick="startTimer()">СТАРТ — 40 СЕКУНД</button></div>
     <div class="score" id="score">0</div>
     <div class="controls"><button class="plus" id="plusBtn" onclick="score(1)" disabled>+1 ШАРИК</button><button class="minus" id="minusBtn" onclick="score(-1)" disabled>−1</button></div>
-    <button class="next" onclick="nextPlayer()">СЛЕДУЮЩИЙ УЧАСТНИК →</button>
+    <div class="nextZone"><button class="next" onclick="nextPlayer()">СЛЕДУЮЩИЙ УЧАСТНИК →</button></div>
    </div>
    <div id="finishedBox" class="finishedMsg" style="display:none">КОНКУРС ЗАВЕРШЁН ✓</div>
    <div class="doneTitle">УЖЕ СЫГРАЛИ</div>
