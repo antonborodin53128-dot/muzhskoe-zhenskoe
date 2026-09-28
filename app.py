@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify, render_template_string
 import os
+import time
 from threading import Lock
 
 app = Flask(__name__)
@@ -10,6 +11,9 @@ state = {
     "participants": [],
     "current": -1,
     "finished": False,
+    "timer_started": False,
+    "timer_started_at": None,
+    "timer_duration": 40,
     "version": 0
 }
 
@@ -30,6 +34,10 @@ body:before{content:"";position:fixed;inset:0;background:radial-gradient(circle 
 input{width:165px;background:#07110c;border:1px solid #22543a;border-radius:14px;color:white;padding:14px;font-size:20px}
 button{border:0;border-radius:14px;padding:15px 22px;font-size:16px;font-weight:900;cursor:pointer}
 .start,.plus{background:#20eb72;color:#001b0d}.reset{background:#3b171d;color:#ff9da9}.minus{background:#15251b;color:white}
+.timerBox{display:flex;justify-content:space-between;align-items:center;gap:14px;margin:12px 0}
+.timer{font-size:42px;font-weight:950;color:#20ee78}.timer.danger{color:#fff}
+.timerStart{background:#20eb72;color:#001b0d;min-width:220px}.timerStart:disabled,.plus:disabled,.minus:disabled{opacity:.35;cursor:not-allowed}
+.timeup{font-size:28px;font-weight:950;color:#fff;letter-spacing:2px}
 .next{background:white;color:#07110c;width:100%;margin-top:12px}.screenlink{font-size:13px;color:#81938a;margin-top:15px}.screenlink a{color:#20ee78}
 .game{display:none}.game.on{display:block}.label{color:#84968c;font-size:14px;font-weight:800;letter-spacing:1px}
 .current{font-size:34px;font-weight:900;margin-top:8px}.score{font-size:72px;color:#20ee78;font-weight:900}
@@ -54,8 +62,9 @@ button{border:0;border-radius:14px;padding:15px 22px;font-size:16px;font-weight:
    <div id="activeBox">
     <div class="label">СЕЙЧАС ИГРАЕТ</div>
     <div class="current" id="currentName"></div>
+    <div class="timerBox"><div><div class="label">ВРЕМЯ</div><div class="timer" id="timer">40</div></div><button class="timerStart" id="timerStart" onclick="startTimer()">СТАРТ — 40 СЕКУНД</button></div>
     <div class="score" id="score">0</div>
-    <div class="controls"><button class="plus" onclick="score(1)">+1 ШАРИК</button><button class="minus" onclick="score(-1)">−1</button></div>
+    <div class="controls"><button class="plus" id="plusBtn" onclick="score(1)" disabled>+1 ШАРИК</button><button class="minus" id="minusBtn" onclick="score(-1)" disabled>−1</button></div>
     <button class="next" onclick="nextPlayer()">СЛЕДУЮЩИЙ УЧАСТНИК →</button>
    </div>
    <div id="finishedBox" class="finishedMsg" style="display:none">КОНКУРС ЗАВЕРШЁН ✓</div>
@@ -70,6 +79,7 @@ async function api(url,body){
 }
 async function startGame(){await api('/api/start',{count:Number(document.getElementById('count').value)});refresh()}
 async function resetGame(){await api('/api/reset');refresh()}
+async function startTimer(){await api('/api/timer/start');refresh()}
 async function score(delta){await api('/api/score',{delta});refresh()}
 async function nextPlayer(){await api('/api/next');refresh()}
 async function refresh(){
@@ -83,6 +93,14 @@ async function refresh(){
  if(valid){
    document.getElementById('currentName').textContent=s.participants[s.current].name;
    document.getElementById('score').textContent=s.participants[s.current].score;
+   const remaining=Math.max(0,Math.ceil(Number(s.remaining)));
+   const running=!!s.timer_started && remaining>0;
+   document.getElementById('timer').textContent=remaining;
+   document.getElementById('timer').classList.toggle('danger',running && remaining<=5);
+   document.getElementById('timerStart').disabled=!!s.timer_started;
+   document.getElementById('timerStart').textContent=s.timer_started?(remaining>0?'ИДЁТ ВРЕМЯ':'ВРЕМЯ!'):'СТАРТ — 40 СЕКУНД';
+   document.getElementById('plusBtn').disabled=!running;
+   document.getElementById('minusBtn').disabled=!running;
  }
  const completed=s.participants.filter((p,i)=>i<s.current || s.finished);
  document.getElementById('done').innerHTML=completed.map(p=>`<div class="doneRow"><span>${p.name}</span><b>${p.score}</b></div>`).join('');
@@ -111,6 +129,7 @@ body:before{content:"";position:fixed;inset:0;background:radial-gradient(circle 
 .kicker{color:#87998f;font-weight:900;letter-spacing:5px;font-size:20px;margin-bottom:24px}
 .name{font-size:clamp(58px,7vw,118px);font-weight:950;line-height:.92;word-break:break-word}
 .score{font-size:clamp(150px,19vw,330px);font-weight:950;color:#20ed76;text-align:center;text-shadow:0 0 35px rgba(32,237,118,.25);transition:transform .16s ease}
+.screenTimer{font-size:clamp(54px,6vw,100px);font-weight:950;color:#20ed76;margin-top:22px}.screenTimer.danger{font-size:clamp(80px,10vw,170px);color:#fff}.waiting{color:#87998f;font-size:24px;font-weight:900;margin-top:22px}.timeup{font-size:clamp(55px,7vw,115px);font-weight:950;color:#fff;margin-top:20px}
 .score.bump{transform:scale(1.12)}
 .results{min-height:130px;border-top:1px solid #123c27;padding-top:18px}
 .resultsTitle{color:#87998f;font-size:17px;font-weight:900;letter-spacing:4px;margin-bottom:12px}
@@ -161,9 +180,16 @@ async function refresh(){
 
     if(active){
       const p = s.participants[current];
+      const remaining=Math.max(0,Math.ceil(Number(s.remaining)));
+      const timerStarted=!!s.timer_started;
+      let timerHtml = !timerStarted
+        ? `<div class="waiting">ГОТОВЬТЕСЬ · 40 СЕКУНД</div>`
+        : remaining>0
+          ? `<div class="screenTimer ${remaining<=5?'danger':''}">${remaining}</div>`
+          : `<div class="timeup">ВРЕМЯ!</div>`;
       main.innerHTML =
         `<div><div class="kicker">СЕЙЧАС ИГРАЕТ</div>`+
-        `<div class="name">${escapeHtml(p.name)}</div></div>`+
+        `<div class="name">${escapeHtml(p.name)}</div>${timerHtml}</div>`+
         `<div class="score" id="score">${Number(p.score)||0}</div>`;
 
       const scoreEl = document.getElementById('score');
@@ -224,10 +250,21 @@ def control():
 def screen():
     return render_template_string(SCREEN_HTML)
 
+def timer_remaining_locked():
+    if not state["timer_started"] or state["timer_started_at"] is None:
+        return state["timer_duration"]
+    return max(0.0, state["timer_duration"] - (time.time() - state["timer_started_at"]))
+
+def state_payload_locked():
+    payload = dict(state)
+    payload["participants"] = [dict(p) for p in state["participants"]]
+    payload["remaining"] = timer_remaining_locked()
+    return payload
+
 @app.get("/api/state")
 def get_state():
     with lock:
-        return jsonify(state)
+        return jsonify(state_payload_locked())
 
 @app.post("/api/start")
 def start():
@@ -240,8 +277,20 @@ def start():
         state["participants"]=[{"name":f"УЧАСТНИК {i+1}","score":0} for i in range(count)]
         state["current"]=0
         state["finished"]=False
+        state["timer_started"]=False
+        state["timer_started_at"]=None
         state["version"]+=1
-        return jsonify(state)
+        return jsonify(state_payload_locked())
+
+@app.post("/api/timer/start")
+def start_timer():
+    with lock:
+        i=state["current"]
+        if not state["finished"] and 0<=i<len(state["participants"]) and not state["timer_started"]:
+            state["timer_started"]=True
+            state["timer_started_at"]=time.time()
+            state["version"]+=1
+        return jsonify(state_payload_locked())
 
 @app.post("/api/score")
 def change_score():
@@ -250,23 +299,28 @@ def change_score():
     except: delta=0
     with lock:
         i=state["current"]
-        if not state["finished"] and 0<=i<len(state["participants"]):
+        if (not state["finished"] and 0<=i<len(state["participants"])
+                and state["timer_started"] and timer_remaining_locked()>0):
             state["participants"][i]["score"]=max(0,state["participants"][i]["score"]+delta)
             state["version"]+=1
-        return jsonify(state)
+        return jsonify(state_payload_locked())
 
 @app.post("/api/next")
 def next_player():
     with lock:
         if not state["participants"]:
-            return jsonify(state)
+            return jsonify(state_payload_locked())
         if state["current"] < len(state["participants"])-1:
             state["current"]+=1
+            state["timer_started"]=False
+            state["timer_started_at"]=None
         else:
             state["finished"]=True
             state["current"]=len(state["participants"])
+            state["timer_started"]=False
+            state["timer_started_at"]=None
         state["version"]+=1
-        return jsonify(state)
+        return jsonify(state_payload_locked())
 
 @app.post("/api/reset")
 def reset():
@@ -275,8 +329,10 @@ def reset():
         state["participants"]=[]
         state["current"]=-1
         state["finished"]=False
+        state["timer_started"]=False
+        state["timer_started_at"]=None
         state["version"]+=1
-        return jsonify(state)
+        return jsonify(state_payload_locked())
 
 if __name__=="__main__":
     app.run(host="0.0.0.0",port=int(os.environ.get("PORT",10000)))
