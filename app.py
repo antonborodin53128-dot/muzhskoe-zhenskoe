@@ -1,50 +1,253 @@
-from flask import Flask, jsonify, request
+from flask import Flask, request, jsonify, render_template_string
+import os
 from threading import Lock
-app=Flask(__name__); lock=Lock()
-state={"participant_count":0,"participants":[],"current":-1,"finished":False,"version":0}
-def bump(): state["version"]+=1
 
-CSS='''*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:radial-gradient(circle at 12% 8%,#0b2a16 0,transparent 28%),#030604;color:#f6fff8;font-family:Arial,sans-serif}body:before{content:"";position:fixed;inset:0;pointer-events:none;box-shadow:inset 0 0 130px rgba(37,240,111,.08)}button,input{font:inherit}.brand{font-weight:900;letter-spacing:.06em}.m{border:2px solid #25f06f;padding:.2em .45em;box-shadow:0 0 22px rgba(37,240,111,.25)}.slash{color:#25f06f;padding:0 .3em}.w{color:#777}'''
+app = Flask(__name__)
+lock = Lock()
 
-CONTROL='''<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Шарики — управление</title><style>'''+CSS+'''
-.wrap{max-width:1050px;margin:auto;padding:28px}.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:28px}.brand{font-size:22px}.tag{color:#25f06f;font-weight:900}.card{background:#09110c;border:1px solid #173523;border-radius:24px;padding:26px}.setup{display:flex;gap:14px;align-items:end;flex-wrap:wrap}label{display:block;color:#829287;font-size:13px;margin-bottom:8px}input{width:180px;background:#020503;color:#fff;border:1px solid #275237;border-radius:14px;padding:15px;font-size:22px}button{border:0;border-radius:15px;padding:15px 20px;font-weight:900;cursor:pointer}.primary,.plus{background:#25f06f;color:#021006}.danger{background:#291014;color:#ff9aa4}.game{display:none;margin-top:22px}.now{display:grid;grid-template-columns:1fr auto;align-items:center;padding:26px;border:1px solid #245536;border-radius:22px}.name{font-size:clamp(34px,6vw,68px);font-weight:900}.score{font-size:clamp(70px,12vw,130px);font-weight:900;color:#25f06f}.actions{display:grid;grid-template-columns:1fr 150px;gap:14px;margin-top:16px}.plus{min-height:115px;font-size:38px}.minus{font-size:26px;background:#18241c;color:#fff}.next{width:100%;margin-top:14px;background:#fff;color:#061009;font-size:20px}.row{display:flex;justify-content:space-between;padding:12px 4px;border-bottom:1px solid #14251a}.row b{color:#25f06f}.done h3{color:#829287;font-size:14px}.links{margin-top:18px;color:#829287;font-size:13px}.links a{color:#25f06f}</style></head><body><div class="wrap"><div class="top"><div class="brand"><span class="m">МУЖСКОЕ</span><span class="slash">/</span><span class="w">ЖЕНСКОЕ</span></div><div class="tag">ШАРИКИ · УПРАВЛЕНИЕ</div></div><div class="card"><div class="setup"><div><label>Количество участников</label><input id="count" type="number" min="1" max="50" value="4"></div><button class="primary" onclick="startGame()">НАЧАТЬ КОНКУРС</button><button class="danger" onclick="resetGame()">СБРОСИТЬ</button></div><div class="game" id="game"><div class="now"><div><div style="color:#829287;font-weight:800">СЕЙЧАС ИГРАЕТ</div><div class="name" id="name"></div></div><div class="score" id="score"></div></div><div class="actions"><button class="plus" onclick="change(1)">+1 ШАРИК</button><button class="minus" onclick="change(-1)">−1</button></div><button class="next" onclick="nextP()">СЛЕДУЮЩИЙ УЧАСТНИК →</button><div class="done"><h3>УЖЕ СЫГРАЛИ</h3><div id="done"></div></div></div><div class="links">Зрительский экран: <a href="/screen" target="_blank">открыть /screen</a></div></div></div><script>
-async function post(p,b={}){await fetch(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});refresh()}
-function startGame(){let n=parseInt(count.value);if(n>0)post('/api/start',{count:n})}function resetGame(){if(confirm('Сбросить весь конкурс?'))post('/api/reset')}function change(delta){post('/api/score',{delta})}function nextP(){post('/api/next')}
-async function refresh(){let s=await(await fetch('/api/state')).json();game.style.display=s.participant_count?'block':'none';if(s.participant_count){if(!s.finished){let p=s.participants[s.current];name.textContent=p.name;score.textContent=p.score}else{name.textContent='КОНКУРС ЗАВЕРШЁН';score.textContent='✓'}done.innerHTML=s.participants.slice(0,s.finished?s.participants.length:s.current).map(p=>`<div class="row"><span>${p.name}</span><b>${p.score}</b></div>`).join('')}}refresh();setInterval(refresh,1000)</script></body></html>'''
+state = {
+    "participant_count": 0,
+    "participants": [],
+    "current": -1,
+    "finished": False,
+    "version": 0
+}
 
-SCREEN='''<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Шарики — экран</title><style>'''+CSS+'''
-html,body{height:100%;overflow:hidden}.screen{height:100vh;padding:4vh 5vw;display:flex;flex-direction:column}.header{display:flex;justify-content:space-between;align-items:center}.brand{font-size:clamp(16px,2vw,30px)}.contest{font-size:clamp(18px,2vw,32px);font-weight:900;color:#25f06f;letter-spacing:.16em}.main{flex:1;display:grid;grid-template-columns:1fr .65fr;align-items:center;gap:5vw;border-bottom:1px solid #173523}.who small{display:block;color:#7e9184;font-size:clamp(15px,1.4vw,24px);font-weight:800;letter-spacing:.14em;margin-bottom:2vh}.name{font-size:clamp(50px,7.5vw,145px);font-weight:900;line-height:.9}.score{font-size:clamp(130px,22vw,390px);font-weight:900;color:#25f06f;text-align:right;line-height:.75;text-shadow:0 0 55px rgba(37,240,111,.3);transition:.12s}.score.pop{transform:scale(1.08)}.history{min-height:17vh;padding-top:2vh}.history-title{color:#65756a;font-size:clamp(12px,1.1vw,18px);font-weight:800;letter-spacing:.15em;margin-bottom:1.3vh}.history-list{display:flex;gap:1.2vw;flex-wrap:wrap}.pill{background:#09130d;border:1px solid #173523;border-radius:14px;padding:.8vh 1vw;color:#aebbb2;font-size:clamp(14px,1.3vw,22px)}.pill b{color:#fff;margin-left:.7vw}.empty{color:#415046}</style></head><body><div class="screen"><div class="header"><div class="brand"><span class="m">МУЖСКОЕ</span><span class="slash">/</span><span class="w">ЖЕНСКОЕ</span></div><div class="contest">ШАРИКИ</div></div><div class="main"><div class="who"><small id="caption">СЕЙЧАС ИГРАЕТ</small><div class="name" id="name">ОЖИДАНИЕ</div></div><div class="score" id="score">0</div></div><div class="history"><div class="history-title">РЕЗУЛЬТАТЫ</div><div class="history-list" id="history"><span class="empty">Участники ещё не играли</span></div></div></div><script>
-let old=null;async function refresh(){try{let s=await(await fetch('/api/state',{cache:'no-store'})).json();if(!s.participant_count){caption.textContent='ГОТОВИМСЯ К КОНКУРСУ';name.textContent='ОЖИДАНИЕ';score.textContent='0'}else if(!s.finished){let p=s.participants[s.current];caption.textContent='СЕЙЧАС ИГРАЕТ';name.textContent=p.name;if(old!==null&&old!==p.score){score.classList.add('pop');setTimeout(()=>score.classList.remove('pop'),140)}score.textContent=p.score;old=p.score}else{caption.textContent='';name.textContent='КОНКУРС ЗАВЕРШЁН';score.textContent='✓'}let a=s.finished?s.participants:s.participants.slice(0,Math.max(0,s.current));history.innerHTML=a.length?a.map(p=>`<span class="pill">${p.name}<b>${p.score}</b></span>`).join(''):'<span class="empty">Участники ещё не играли</span>'}catch(e){}}refresh();setInterval(refresh,350)</script></body></html>'''
+CONTROL_HTML = r"""
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Шарики — управление</title>
+<style>
+*{box-sizing:border-box} body{margin:0;background:#020b07;color:#f4f5ef;font-family:Arial,Helvetica,sans-serif}
+body:before{content:"";position:fixed;inset:0;background:radial-gradient(circle at 0 20%,rgba(0,255,115,.14),transparent 34%);pointer-events:none}
+.wrap{max-width:900px;margin:auto;padding:20px}.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+.brand{font-size:25px;font-weight:900}.brand .m{border:2px solid #20ee78;padding:7px 10px}.brand .slash,.accent{color:#20ee78}.brand .w{color:#747d78}
+.panel,.game{border:1px solid #174b30;background:rgba(8,24,16,.9);border-radius:22px;padding:22px;margin-bottom:18px}
+.row{display:flex;gap:14px;align-items:end;flex-wrap:wrap}.field label{display:block;color:#81938a;font-size:13px;margin:0 0 7px}
+input{width:165px;background:#07110c;border:1px solid #22543a;border-radius:14px;color:white;padding:14px;font-size:20px}
+button{border:0;border-radius:14px;padding:15px 22px;font-size:16px;font-weight:900;cursor:pointer}
+.start,.plus{background:#20eb72;color:#001b0d}.reset{background:#3b171d;color:#ff9da9}.minus{background:#15251b;color:white}
+.next{background:white;color:#07110c;width:100%;margin-top:12px}.screenlink{font-size:13px;color:#81938a;margin-top:15px}.screenlink a{color:#20ee78}
+.game{display:none}.game.on{display:block}.label{color:#84968c;font-size:14px;font-weight:800;letter-spacing:1px}
+.current{font-size:34px;font-weight:900;margin-top:8px}.score{font-size:72px;color:#20ee78;font-weight:900}
+.controls{display:grid;grid-template-columns:1fr 135px;gap:12px}.plus{font-size:32px}.minus{font-size:26px}
+.doneTitle{color:#81938a;font-size:12px;font-weight:900;margin-top:15px}.doneRow{display:flex;justify-content:space-between;padding:10px 4px;border-bottom:1px solid #10281b}.doneRow b{color:#20ee78}
+.finishedMsg{font-size:34px;font-weight:900;color:#20ee78}
+@media(max-width:600px){.controls{grid-template-columns:1fr 90px}.current{font-size:28px}.score{font-size:58px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+ <div class="top"><div class="brand"><span class="m">МУЖСКОЕ</span> <span class="slash">/</span> <span class="w">ЖЕНСКОЕ</span></div><b class="accent">ШАРИКИ · УПРАВЛЕНИЕ</b></div>
+ <div class="panel">
+   <div class="row">
+    <div class="field"><label>Количество участников</label><input id="count" type="number" min="1" max="30" value="4"></div>
+    <button class="start" onclick="startGame()">НАЧАТЬ КОНКУРС</button>
+    <button class="reset" onclick="resetGame()">СБРОСИТЬ</button>
+   </div>
+   <div class="screenlink">Зрительский экран: <a href="/screen" target="_blank">открыть /screen</a></div>
+ </div>
+ <div class="game" id="game">
+   <div id="activeBox">
+    <div class="label">СЕЙЧАС ИГРАЕТ</div>
+    <div class="current" id="currentName"></div>
+    <div class="score" id="score">0</div>
+    <div class="controls"><button class="plus" onclick="score(1)">+1 ШАРИК</button><button class="minus" onclick="score(-1)">−1</button></div>
+    <button class="next" onclick="nextPlayer()">СЛЕДУЮЩИЙ УЧАСТНИК →</button>
+   </div>
+   <div id="finishedBox" class="finishedMsg" style="display:none">КОНКУРС ЗАВЕРШЁН ✓</div>
+   <div class="doneTitle">УЖЕ СЫГРАЛИ</div>
+   <div id="done"></div>
+ </div>
+</div>
+<script>
+async function api(url,body){
+ const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});
+ return r.json()
+}
+async function startGame(){await api('/api/start',{count:Number(document.getElementById('count').value)});refresh()}
+async function resetGame(){await api('/api/reset');refresh()}
+async function score(delta){await api('/api/score',{delta});refresh()}
+async function nextPlayer(){await api('/api/next');refresh()}
+async function refresh(){
+ const s=await fetch('/api/state',{cache:'no-store'}).then(r=>r.json());
+ const game=document.getElementById('game');
+ if(!s.participants.length){game.classList.remove('on');return}
+ game.classList.add('on');
+ const valid=s.current>=0 && s.current<s.participants.length;
+ document.getElementById('activeBox').style.display=valid&&!s.finished?'block':'none';
+ document.getElementById('finishedBox').style.display=s.finished?'block':'none';
+ if(valid){
+   document.getElementById('currentName').textContent=s.participants[s.current].name;
+   document.getElementById('score').textContent=s.participants[s.current].score;
+ }
+ const completed=s.participants.filter((p,i)=>i<s.current || s.finished);
+ document.getElementById('done').innerHTML=completed.map(p=>`<div class="doneRow"><span>${p.name}</span><b>${p.score}</b></div>`).join('');
+}
+setInterval(refresh,1000);refresh();
+</script>
+</body></html>
+"""
+
+SCREEN_HTML = r"""
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Шарики — экран</title>
+<style>
+*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden}
+body{background:#020905;color:#f5f6ef;font-family:Arial,Helvetica,sans-serif}
+body:before{content:"";position:fixed;inset:0;background:radial-gradient(circle at 0 30%,rgba(0,255,112,.16),transparent 35%);pointer-events:none}
+.wrap{height:100vh;padding:28px 5vw 34px;display:flex;flex-direction:column}
+.top{display:flex;justify-content:space-between;align-items:center}.brand{font-size:28px;font-weight:900}
+.brand .m{border:2px solid #20ed76;padding:8px 12px}.brand .slash,.title{color:#20ed76}.brand .w{color:#747c78}
+.title{font-size:30px;font-weight:900;letter-spacing:6px}
+.main{flex:1;display:grid;grid-template-columns:minmax(0,1fr) 280px;align-items:center;gap:35px}
+.kicker{color:#87998f;font-weight:900;letter-spacing:5px;font-size:20px;margin-bottom:24px}
+.name{font-size:clamp(58px,7vw,118px);font-weight:950;line-height:.92;word-break:break-word}
+.score{font-size:clamp(150px,19vw,330px);font-weight:950;color:#20ed76;text-align:center;text-shadow:0 0 35px rgba(32,237,118,.25);transition:transform .16s ease}
+.score.bump{transform:scale(1.12)}
+.results{min-height:130px;border-top:1px solid #123c27;padding-top:18px}
+.resultsTitle{color:#87998f;font-size:17px;font-weight:900;letter-spacing:4px;margin-bottom:12px}
+.resultList{display:flex;gap:12px;flex-wrap:wrap}.result{border:1px solid #1c5638;border-radius:13px;padding:11px 16px;font-size:18px;background:#07150d}
+.result b{color:#20ed76;margin-left:12px}.empty{color:#526158}
+.finish{text-align:center;font-size:clamp(54px,7vw,110px);font-weight:950}.finish span{display:block;color:#20ed76;margin-top:18px}
+@media(max-width:850px){.main{grid-template-columns:1fr 180px}.brand{font-size:20px}.title{font-size:20px}.name{font-size:55px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+ <div class="top"><div class="brand"><span class="m">МУЖСКОЕ</span> <span class="slash">/</span> <span class="w">ЖЕНСКОЕ</span></div><div class="title">ШАРИКИ</div></div>
+ <div class="main" id="main">
+   <div><div class="kicker" id="kicker">СЕЙЧАС ИГРАЕТ</div><div class="name" id="name">ОЖИДАНИЕ</div></div>
+   <div class="score" id="score">0</div>
+ </div>
+ <div class="results">
+   <div class="resultsTitle">РЕЗУЛЬТАТЫ</div>
+   <div class="resultList" id="results"><span class="empty">Участники ещё не играли</span></div>
+ </div>
+</div>
+<script>
+let lastVersion=-1,lastScore=null;
+async function refresh(){
+ try{
+   const s=await fetch('/api/state?ts='+Date.now(),{cache:'no-store'}).then(r=>r.json());
+   const name=document.getElementById('name'), score=document.getElementById('score'),
+         kicker=document.getElementById('kicker'), main=document.getElementById('main'),
+         results=document.getElementById('results');
+
+   // A participant is active only when current is a valid array index.
+   const hasPlayers=Array.isArray(s.participants) && s.participants.length>0;
+   const active=hasPlayers && !s.finished && Number.isInteger(s.current) &&
+                s.current>=0 && s.current<s.participants.length;
+
+   if(active){
+      const p=s.participants[s.current];
+      kicker.textContent='СЕЙЧАС ИГРАЕТ';
+      name.textContent=p.name;
+      score.textContent=p.score;
+      main.innerHTML=`<div><div class="kicker">СЕЙЧАС ИГРАЕТ</div><div class="name">${escapeHtml(p.name)}</div></div><div class="score" id="score">${p.score}</div>`;
+      const newScore=document.getElementById('score');
+      if(lastScore!==null && p.score!==lastScore){
+        newScore.classList.add('bump');setTimeout(()=>newScore.classList.remove('bump'),180);
+      }
+      lastScore=p.score;
+   } else if(s.finished && hasPlayers){
+      main.innerHTML=`<div class="finish" style="grid-column:1/-1">КОНКУРС ЗАВЕРШЁН<span>✓</span></div>`;
+      lastScore=null;
+   } else {
+      main.innerHTML=`<div><div class="kicker">ШАРИКИ</div><div class="name">ОЖИДАНИЕ</div></div><div class="score" id="score">0</div>`;
+      lastScore=null;
+   }
+
+   // Completed players are all indices before current; after finish, everybody.
+   const completed=hasPlayers ? s.participants.filter((p,i)=>s.finished || i<s.current) : [];
+   results.innerHTML=completed.length
+      ? completed.map(p=>`<div class="result">${escapeHtml(p.name)} <b>${p.score}</b></div>`).join('')
+      : '<span class="empty">Участники ещё не играли</span>';
+   lastVersion=s.version;
+ }catch(e){}
+}
+function escapeHtml(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+setInterval(refresh,300);refresh();
+</script>
+</body></html>
+"""
+
+@app.after_request
+def no_cache(resp):
+    if request.path.startswith("/api/") or request.path == "/screen":
+        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        resp.headers["Pragma"] = "no-cache"
+        resp.headers["Expires"] = "0"
+    return resp
 
 @app.get("/")
-def control(): return CONTROL
+def control():
+    return render_template_string(CONTROL_HTML)
+
 @app.get("/screen")
-def screen(): return SCREEN
+def screen():
+    return render_template_string(SCREEN_HTML)
+
 @app.get("/api/state")
 def get_state():
-    with lock: return jsonify(state)
+    with lock:
+        return jsonify(state)
+
 @app.post("/api/start")
 def start():
-    d=request.get_json(silent=True) or {}; n=max(1,min(50,int(d.get("count",1))))
+    data=request.get_json(silent=True) or {}
+    try: count=int(data.get("count",4))
+    except: count=4
+    count=max(1,min(count,30))
     with lock:
-        state.update(participant_count=n,participants=[{"name":f"УЧАСТНИК {i+1}","score":0} for i in range(n)],current=0,finished=False); bump(); return jsonify(state)
+        state["participant_count"]=count
+        state["participants"]=[{"name":f"УЧАСТНИК {i+1}","score":0} for i in range(count)]
+        state["current"]=0
+        state["finished"]=False
+        state["version"]+=1
+        return jsonify(state)
+
 @app.post("/api/score")
-def score_api():
-    d=request.get_json(silent=True) or {}; delta=1 if int(d.get("delta",1))>0 else -1
+def change_score():
+    data=request.get_json(silent=True) or {}
+    try: delta=int(data.get("delta",0))
+    except: delta=0
     with lock:
         i=state["current"]
-        if 0<=i<len(state["participants"]) and not state["finished"]: state["participants"][i]["score"]=max(0,state["participants"][i]["score"]+delta); bump()
+        if not state["finished"] and 0<=i<len(state["participants"]):
+            state["participants"][i]["score"]=max(0,state["participants"][i]["score"]+delta)
+            state["version"]+=1
         return jsonify(state)
+
 @app.post("/api/next")
-def next_api():
+def next_player():
     with lock:
-        if state["participant_count"] and not state["finished"]:
-            if state["current"]+1<state["participant_count"]: state["current"]+=1
-            else: state["finished"]=True
-            bump()
+        if not state["participants"]:
+            return jsonify(state)
+        if state["current"] < len(state["participants"])-1:
+            state["current"]+=1
+        else:
+            state["finished"]=True
+            state["current"]=len(state["participants"])
+        state["version"]+=1
         return jsonify(state)
+
 @app.post("/api/reset")
 def reset():
-    with lock: state.update(participant_count=0,participants=[],current=-1,finished=False); bump(); return jsonify(state)
+    with lock:
+        state["participant_count"]=0
+        state["participants"]=[]
+        state["current"]=-1
+        state["finished"]=False
+        state["version"]+=1
+        return jsonify(state)
+
 if __name__=="__main__":
-    import os; app.run(host="0.0.0.0",port=int(os.environ.get("PORT",10000)))
+    app.run(host="0.0.0.0",port=int(os.environ.get("PORT",10000)))
