@@ -133,48 +133,77 @@ body:before{content:"";position:fixed;inset:0;background:radial-gradient(circle 
  </div>
 </div>
 <script>
-let lastVersion=-1,lastScore=null;
-async function refresh(){
- try{
-   const s=await fetch('/api/state?ts='+Date.now(),{cache:'no-store'}).then(r=>r.json());
-   const name=document.getElementById('name'), score=document.getElementById('score'),
-         kicker=document.getElementById('kicker'), main=document.getElementById('main'),
-         results=document.getElementById('results');
+let lastScore = null;
+let pollTimer = null;
 
-   // A participant is active only when current is a valid array index.
-   const hasPlayers=Array.isArray(s.participants) && s.participants.length>0;
-   const active=hasPlayers && !s.finished && Number.isInteger(s.current) &&
-                s.current>=0 && s.current<s.participants.length;
-
-   if(active){
-      const p=s.participants[s.current];
-      kicker.textContent='СЕЙЧАС ИГРАЕТ';
-      name.textContent=p.name;
-      score.textContent=p.score;
-      main.innerHTML=`<div><div class="kicker">СЕЙЧАС ИГРАЕТ</div><div class="name">${escapeHtml(p.name)}</div></div><div class="score" id="score">${p.score}</div>`;
-      const newScore=document.getElementById('score');
-      if(lastScore!==null && p.score!==lastScore){
-        newScore.classList.add('bump');setTimeout(()=>newScore.classList.remove('bump'),180);
-      }
-      lastScore=p.score;
-   } else if(s.finished && hasPlayers){
-      main.innerHTML=`<div class="finish" style="grid-column:1/-1">КОНКУРС ЗАВЕРШЁН<span>✓</span></div>`;
-      lastScore=null;
-   } else {
-      main.innerHTML=`<div><div class="kicker">ШАРИКИ</div><div class="name">ОЖИДАНИЕ</div></div><div class="score" id="score">0</div>`;
-      lastScore=null;
-   }
-
-   // Completed players are all indices before current; after finish, everybody.
-   const completed=hasPlayers ? s.participants.filter((p,i)=>s.finished || i<s.current) : [];
-   results.innerHTML=completed.length
-      ? completed.map(p=>`<div class="result">${escapeHtml(p.name)} <b>${p.score}</b></div>`).join('')
-      : '<span class="empty">Участники ещё не играли</span>';
-   lastVersion=s.version;
- }catch(e){}
+function escapeHtml(v){
+  return String(v).replace(/[&<>"']/g,c=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
 }
-function escapeHtml(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-setInterval(refresh,300);refresh();
+
+async function refresh(){
+  try{
+    const r = await fetch('/api/state?_=' + Date.now(), {
+      method:'GET',
+      cache:'no-store',
+      headers:{'Cache-Control':'no-cache'}
+    });
+    if(!r.ok) throw new Error('state');
+    const s = await r.json();
+
+    const main = document.getElementById('main');
+    const results = document.getElementById('results');
+    const hasPlayers = Array.isArray(s.participants) && s.participants.length > 0;
+    const current = Number(s.current);
+    const active = hasPlayers && !s.finished &&
+                   current >= 0 && current < s.participants.length;
+
+    if(active){
+      const p = s.participants[current];
+      main.innerHTML =
+        `<div><div class="kicker">СЕЙЧАС ИГРАЕТ</div>`+
+        `<div class="name">${escapeHtml(p.name)}</div></div>`+
+        `<div class="score" id="score">${Number(p.score)||0}</div>`;
+
+      const scoreEl = document.getElementById('score');
+      if(lastScore !== null && Number(p.score) !== lastScore){
+        scoreEl.classList.add('bump');
+        setTimeout(()=>scoreEl.classList.remove('bump'),180);
+      }
+      lastScore = Number(p.score)||0;
+    }else if(s.finished && hasPlayers){
+      main.innerHTML =
+        `<div class="finish" style="grid-column:1/-1">`+
+        `КОНКУРС ЗАВЕРШЁН<span>✓</span></div>`;
+      lastScore = null;
+    }else{
+      main.innerHTML =
+        `<div><div class="kicker">ШАРИКИ</div>`+
+        `<div class="name">ОЖИДАНИЕ</div></div>`+
+        `<div class="score" id="score">0</div>`;
+      lastScore = null;
+    }
+
+    const completed = hasPlayers
+      ? s.participants.filter((p,i)=>s.finished || i < current)
+      : [];
+
+    results.innerHTML = completed.length
+      ? completed.map(p=>
+          `<div class="result">${escapeHtml(p.name)} <b>${Number(p.score)||0}</b></div>`
+        ).join('')
+      : '<span class="empty">Участники ещё не играли</span>';
+
+  }catch(e){
+    // Keep the last visible state and simply retry.
+  }finally{
+    clearTimeout(pollTimer);
+    pollTimer = setTimeout(refresh, 250);
+  }
+}
+
+refresh();
 </script>
 </body></html>
 """
