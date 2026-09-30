@@ -42,7 +42,7 @@ button{border:0;border-radius:14px;padding:15px 22px;font-size:16px;font-weight:
 .timeup{font-size:28px;font-weight:950;color:#fff;letter-spacing:2px}
 .nextZone{margin-top:34px;padding-top:20px;border-top:1px solid #174b30;display:flex;justify-content:flex-end}.next{background:#18231d;color:#cbd5cf;border:1px solid #405047;width:auto;min-width:270px;margin:0;font-size:14px}.next:hover{background:#243129}.screenlink{font-size:13px;color:#81938a;margin-top:15px}.screenlink a{color:#20ee78}
 .game{display:none}.game.on{display:block}.label{color:#84968c;font-size:14px;font-weight:800;letter-spacing:1px}
-.current{font-size:34px;font-weight:900;margin-top:8px}.score{font-size:72px;color:#20ee78;font-weight:900}
+.current{font-size:34px;font-weight:900;margin-top:8px}.score{font-size:72px;color:#20ee78;font-weight:900;max-width:100%;padding-right:18px;box-sizing:border-box;font-size:clamp(150px,18vw,310px)}
 .controls{display:grid;grid-template-columns:1fr 135px;gap:12px}.plus{font-size:32px}.minus{font-size:26px}
 .doneTitle{color:#81938a;font-size:12px;font-weight:900;margin-top:15px}.doneRow{display:flex;justify-content:space-between;padding:10px 4px;border-bottom:1px solid #10281b}.doneRow b{color:#20ee78}
 .finishedMsg{font-size:34px;font-weight:900;color:#20ee78}
