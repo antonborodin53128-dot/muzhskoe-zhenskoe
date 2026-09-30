@@ -13,7 +13,7 @@ state = {
     "finished": False,
     "timer_started": False,
     "timer_started_at": None,
-    "timer_duration": 40,
+     "timer_duration": 40,
     "countdown_duration": 5,
     "countdown_started_at": None,
     "version": 0
@@ -133,7 +133,9 @@ body:before{content:"";position:fixed;inset:0;background:radial-gradient(circle 
 .kicker{color:#87998f;font-weight:900;letter-spacing:5px;font-size:20px;margin-bottom:24px}
 .name{font-size:clamp(58px,7vw,118px);font-weight:950;line-height:.92;word-break:break-word}
 .score{font-size:clamp(150px,19vw,330px);font-weight:950;color:#20ed76;text-align:center;text-shadow:0 0 35px rgba(32,237,118,.25);transition:transform .16s ease}
-.countdown{font-size:clamp(150px,22vw,360px);font-weight:950;color:#20ed76;text-align:center;text-shadow:0 0 45px rgba(32,237,118,.35);animation:countPulse .75s ease both}.countText{color:#87998f;font-weight:900;letter-spacing:6px;font-size:22px;text-align:center;margin-bottom:10px}@keyframes countPulse{0%{transform:scale(.7);opacity:.2}45%{transform:scale(1.12);opacity:1}100%{transform:scale(1);opacity:1}}.screenTimer{font-size:clamp(54px,6vw,100px);font-weight:950;color:#20ed76;margin-top:22px}.screenTimer.danger{font-size:clamp(80px,10vw,170px);color:#fff}.waiting{color:#87998f;font-size:24px;font-weight:900;margin-top:22px}.timeup{font-size:clamp(55px,7vw,115px);font-weight:950;color:#fff;margin-top:20px}
+.countdown{font-size:clamp(150px,22vw,360px);font-weight:950;color:#20ed76;text-align:center;text-shadow:0 0 45px rgba(32,237,118,.35)}
+.countText{color:#87998f;font-weight:900;letter-spacing:6px;font-size:22px;text-align:center;margin-bottom:10px}
+.screenTimer{font-size:clamp(54px,6vw,100px);font-weight:950;color:#20ed76;margin-top:22px}.screenTimer.danger{font-size:clamp(80px,10vw,170px);color:#fff}.waiting{color:#87998f;font-size:24px;font-weight:900;margin-top:22px}.timeup{font-size:clamp(55px,7vw,115px);font-weight:950;color:#fff;margin-top:20px}
 .score.bump{transform:scale(1.12)}
 .results{min-height:130px;border-top:1px solid #123c27;padding-top:18px}
 .resultsTitle{color:#87998f;font-size:17px;font-weight:900;letter-spacing:4px;margin-bottom:12px}
@@ -192,7 +194,7 @@ async function refresh(){
         main.innerHTML =
           `<div style="grid-column:1/-1;text-align:center">`+
           `<div class="countText">ПРИГОТОВИЛИСЬ</div>`+
-          `<div class="countdown" key="${countdown}">${countdown}</div></div>`;
+          `<div class="countdown">${countdown}</div></div>`;
       }else{
         let timerHtml = !timerStarted
           ? `<div class="waiting">ГОТОВЬТЕСЬ · 40 СЕКУНД</div>`
