@@ -220,7 +220,7 @@ async function refresh(){
       lastScore = null;
     }else{
       main.innerHTML =
-        `<div><div class="kicker">ШАРИКИ</div>`+
+        `<div>`+
         `<div class="name">ОЖИДАНИЕ</div></div>`+
         `<div class="score" id="score">0</div>`;
       lastScore = null;
